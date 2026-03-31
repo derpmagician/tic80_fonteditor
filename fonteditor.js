@@ -11,6 +11,7 @@ const GRID = 8;
 
 // Teclas
 const KEY_A = 1;
+const KEY_H = 8;
 const KEY_P = 16;
 const KEY_S = 19;
 const KEY_UP = 58;
@@ -27,6 +28,7 @@ let cursorY = 0;
 let mousePrevLeft = false;
 let lastInputWasMouse = false;
 let mouseAnimationFrame = 0; // contador de frames para animar iconos
+let showHelp = false; // mostrar modal de ayuda
 
 // UI botones de cambio de carácter
 const UI_CHAR_Y = 10;
@@ -123,7 +125,9 @@ function TIC() {
 
   handleInput();
   drawEditor();
-  drawPreview();
+  if (!showHelp) {
+    drawPreview();
+  }
 }
 
 // ======================
@@ -170,6 +174,8 @@ function handleInput() {
   let gamepadCharPrev = btnp(7); // Y
   let gamepadCharNext = btnp(6); // X
 
+  let totalOptions = getAllEditableKeys().length;
+
   // UI + teclado + gamepad de cambio de carácter (siempre disponible)
   let uiPrev = false;
   let uiNext = false;
@@ -181,27 +187,27 @@ function handleInput() {
 
   let changed = false;
   if (m.left && !mousePrevLeft && uiPrev) {
-    index = (index + chars.length - 1) % chars.length;
+    index = (index + totalOptions - 1) % totalOptions;
     changed = true;
     lastInputWasMouse = true;
   } else if (m.left && !mousePrevLeft && uiNext) {
-    index = (index + 1) % chars.length;
+    index = (index + 1) % totalOptions;
     changed = true;
     lastInputWasMouse = true;
   } else if (keyPrev) {
-    index = (index + chars.length - 1) % chars.length;
+    index = (index + totalOptions - 1) % totalOptions;
     changed = true;
     lastInputWasMouse = false;
   } else if (keyNext) {
-    index = (index + 1) % chars.length;
+    index = (index + 1) % totalOptions;
     changed = true;
     lastInputWasMouse = false;
   } else if (gamepadCharPrev) {
-    index = (index + chars.length - 1) % chars.length;
+    index = (index + totalOptions - 1) % totalOptions;
     changed = true;
     lastInputWasMouse = false;
   } else if (gamepadCharNext) {
-    index = (index + 1) % chars.length;
+    index = (index + 1) % totalOptions;
     changed = true;
     lastInputWasMouse = false;
   }
@@ -246,8 +252,13 @@ function handleInput() {
   }
 
   // El cambio de carácter ya se procesa antes (UI mouse + A/S + X/Y gamepad).
-  if (index < 0) index = chars.length - 1;
-  if (index >= chars.length) index = 0;
+  if (index < 0) index = totalOptions - 1;
+  if (index >= totalOptions) index = 0;
+
+  // Ayuda modal
+  if (keyp(KEY_H)) {
+    showHelp = !showHelp;
+  }
 
   // Export
   if (keyp(KEY_P) || keyp(112)) { // P
@@ -262,7 +273,15 @@ function handleInput() {
 // EDITOR
 // ======================
 function drawEditor() {
+  if (showHelp) {
+    drawHelpModal();
+    return;
+  }
+
   let current = getCurrentChar();
+  if (!current) {
+    current = createEmptyChar();
+  }
   let m = getMouse();
   let hasMouse = m && m.x >= 0 && m.y >= 0;
   let mouseOverGrid = hasMouse && m.x < GRID * CELL && m.y < GRID * CELL;
@@ -283,14 +302,7 @@ function drawEditor() {
     }
   }
 
-  // Dibujar ícono de botón de mouse en lugar de texto "LMB"/"RMB".
-  drawMouseButtonIcon(getLmbSprites(), 0, 80);
-  print("paint", 20, 90, 12, false, 1, true);
-
-  drawMouseButtonIcon(getRmbSprites(), 0, 97);
-  print("erase", 20, 107, 12, false, 1, true);
-
-  print("P export", 0, 130, 12, false, 1, true);
+    print("press H for help", 0, 90, 12, false, 1, true);
 
   // Botones de UI (click → cambio de character)
   rect(UI_PREV_BUTTON.x, UI_PREV_BUTTON.y, UI_PREV_BUTTON.w, UI_PREV_BUTTON.h, 2);
@@ -299,13 +311,33 @@ function drawEditor() {
   rect(UI_NEXT_BUTTON.x, UI_NEXT_BUTTON.y, UI_NEXT_BUTTON.w, UI_NEXT_BUTTON.h, 2);
   print(">", UI_NEXT_BUTTON.x + 4, UI_NEXT_BUTTON.y + 4, 12, false, 1, true);
 
-  print("CHAR:    PREVIEW:", UI_CHARGROUP_LABEL.x, UI_CHARGROUP_LABEL.y - 8, 12, false, 1, true);
+  print("CHAR:          PREVIEW:", UI_CHARGROUP_LABEL.x, UI_CHARGROUP_LABEL.y - 8, 12, false, 1, true);
   // Label del caracter central (ordenado con constantes)
   let label = getCurrentKey();
   print(label, UI_CHAR_LABEL.x, UI_CHAR_LABEL.y, 12, false, 1, true);
-  print("Cursor: " + cursorX + "," + cursorY + " (A/S change char, Z toggle pixel, X erase pixel)", 0, 120, 12, false, 1, true);
 
+}
 
+function drawHelpModal() {
+  // Fondo semitransparente y panel central
+  rect(0, 0, 240, 136, 0);
+  rect(8, 8, 224, 120, 1);
+  rectb(8, 8, 224, 120, 12);
+
+  print("HELP (H para cerrar)", 16, 14, 12, false, 1, true);
+  print("A/S: cambiar caracter", 16, 28, 12, false, 1, true);
+  print("Z: alternar pixel", 16, 38, 12, false, 1, true);
+  print("X: borrar pixel", 16, 48, 12, false, 1, true);
+  print("P: exportar fuente", 16, 58, 12, false, 1, true);
+  print("H: mostrar/ocultar ayuda", 16, 68, 12, false, 1, true);
+
+  // Iconos LMB/RMB y explicación
+  print("LMB: pinta", 16, 84, 12, false, 1, true);
+  drawMouseButtonIcon(getLmbSprites(), 90, 80);
+  print("RMB: borra", 16, 100, 12, false, 1, true);
+  drawMouseButtonIcon(getRmbSprites(), 90, 96);
+
+  print("Ppal: cambia ligaturas con A/S.", 16, 116, 12, false, 1, true);
 }
 
 // ======================
@@ -325,30 +357,16 @@ function drawPreview() {
     lineY += CELL + 2; // menos separación entre líneas
   }
 
-  // Mostrar ligaturas en una nueva línea tras las letras.
+  // Mostrar ligaturas en una nueva línea tras las letras, uno al lado del otro.
   let ligKeys = Object.keys(ligatures);
   if (ligKeys.length) {
     lineY += CELL + 4;
     print("LIGS:", UI_PREVIEW_X, lineY - 8, 7, false, 1, true);
 
-    // muestra ligatura base + glyph representado
-    let LigDrawX = UI_PREVIEW_X;
-    let LigDrawY = lineY;
-    for (let i = 0; i < ligKeys.length; i++) {
-      let pair = ligKeys[i];
-      let glyph = ligatures[pair];
-
-      // dibujar la secuencia y el nombre
-      print(pair, LigDrawX, LigDrawY, 12, false, 1, true);
-      drawChar(glyph, LigDrawX + 30, LigDrawY);
-
-      LigDrawY += CELL + 2;
-      if (LigDrawY > UI_PREVIEW_Y + 120) {
-        LigDrawY = lineY;
-        LigDrawX += 80;
-      }
-    }
+    let ligText = ligKeys.join("");
+    drawText(ligText, UI_PREVIEW_X, lineY);
   }
+
 }
 
 // ======================
@@ -401,12 +419,36 @@ function drawChar(c, x, y) {
 // ======================
 // HELPERS
 // ======================
+function getAllEditableKeys() {
+  // chars es una cadena; convertimos a array para que cada carácter sea una entrada
+  // y las ligaturas sean entradas completas ("=>", "<=", etc.)
+  return chars.split("").concat(Object.keys(ligatures));
+}
+
 function getCurrentKey() {
-  return chars[index];
+  let all = getAllEditableKeys();
+  if (index < 0 || index >= all.length) {
+    index = 0;
+  }
+  let key = all[index] || "";
+  // Evitar key vacío y/o index inválido
+  if (!key && chars.length > 0) {
+    index = 0;
+    key = chars[0];
+  }
+  return key;
 }
 
 function getCurrentChar() {
-  return font[getCurrentKey()];
+  let key = getCurrentKey();
+  if (!key) {
+    key = chars[0];
+  }
+  let targetKey = ligatures[key] ? ligatures[key] : key;
+  if (!font[targetKey]) {
+    font[targetKey] = createEmptyChar();
+  }
+  return font[targetKey];
 }
 
 function drawMouseButtonIcon(spriteIndexes, x, y) {
