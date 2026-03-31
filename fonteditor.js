@@ -26,6 +26,7 @@ let cursorX = 0;
 let cursorY = 0;
 let mousePrevLeft = false;
 let lastInputWasMouse = false;
+let mouseAnimationFrame = 0; // contador de frames para animar iconos
 
 // UI botones de cambio de carácter
 const UI_CHAR_Y = 10;
@@ -40,6 +41,33 @@ const UI_NEXT_BUTTON = { x: UI_CONTROLS_X + 24, y: UI_CHAR_Y, w: 10, h: 10 };
 const UI_PREVIEW_X = 120;
 const UI_PREVIEW_Y = UI_CHAR_Y- 8;
 
+// Sprites de mouse (4 tiles 8x8 cada uno, valores directos del sprite tab)
+const MOUSE_LMB_SPRITES = [258, 257, 274, 273];
+const MOUSE_RMB_SPRITES = [256, 259, 272, 275];
+
+// Velocidad de animación de iconos de mouse (en ticks)
+const MOUSE_ICON_TOGGLE_FRAMES = 24; // más lento (24 ticks ≈ 0.8s a 30fps)
+
+// Animación de columnas (LMB columna izquierda; RMB columna derecha)
+function getMouseIconPhase() {
+  return Math.floor(mouseAnimationFrame / MOUSE_ICON_TOGGLE_FRAMES) % 2;
+}
+
+function getLmbSprites() {
+  if (getMouseIconPhase() === 1) {
+    // Alterna la primera columna a 0/16 en sprite tab -> 256/272
+    return [256, 257, 272, 273];
+  }
+  return MOUSE_LMB_SPRITES;
+}
+
+function getRmbSprites() {
+  if (getMouseIconPhase() === 1) {
+    // Alterna la segunda columna a 1/17 en sprite tab -> 257/273
+    return [256, 257, 272, 273];
+  }
+  return MOUSE_RMB_SPRITES;
+}
 
 // Fuente
 let font = {};
@@ -90,6 +118,8 @@ initFont();
 // ======================
 function TIC() {
   cls(0);
+
+  mouseAnimationFrame += 1;
 
   handleInput();
   drawEditor();
@@ -253,23 +283,27 @@ function drawEditor() {
     }
   }
 
+  // Dibujar ícono de botón de mouse en lugar de texto "LMB"/"RMB".
+  drawMouseButtonIcon(getLmbSprites(), 0, 80);
+  print("paint", 20, 90, 12, false, 1, true);
 
-  print("LMB paint", 0, 95, 12);
-  print("RMB erase", 0, 105, 12);
-  print("P export", 0, 115, 12);
+  drawMouseButtonIcon(getRmbSprites(), 0, 97);
+  print("erase", 20, 107, 12, false, 1, true);
+
+  print("P export", 0, 130, 12, false, 1, true);
 
   // Botones de UI (click → cambio de character)
   rect(UI_PREV_BUTTON.x, UI_PREV_BUTTON.y, UI_PREV_BUTTON.w, UI_PREV_BUTTON.h, 2);
-  print("<", UI_PREV_BUTTON.x + 4, UI_PREV_BUTTON.y + 4, 12);
+  print("<", UI_PREV_BUTTON.x + 4, UI_PREV_BUTTON.y + 4, 12, false, 1, true);
 
   rect(UI_NEXT_BUTTON.x, UI_NEXT_BUTTON.y, UI_NEXT_BUTTON.w, UI_NEXT_BUTTON.h, 2);
-  print(">", UI_NEXT_BUTTON.x + 4, UI_NEXT_BUTTON.y + 4, 12);
+  print(">", UI_NEXT_BUTTON.x + 4, UI_NEXT_BUTTON.y + 4, 12, false, 1, true);
 
-  print("CHAR:    PREVIEW:", UI_CHARGROUP_LABEL.x, UI_CHARGROUP_LABEL.y - 8, 12);
+  print("CHAR:    PREVIEW:", UI_CHARGROUP_LABEL.x, UI_CHARGROUP_LABEL.y - 8, 12, false, 1, true);
   // Label del caracter central (ordenado con constantes)
   let label = getCurrentKey();
-  print(label, UI_CHAR_LABEL.x, UI_CHAR_LABEL.y, 12);
-  print("Cursor: " + cursorX + "," + cursorY + " (A/S change char, Z toggle pixel, X erase pixel)", 0, 130, 12);
+  print(label, UI_CHAR_LABEL.x, UI_CHAR_LABEL.y, 12, false, 1, true);
+  print("Cursor: " + cursorX + "," + cursorY + " (A/S change char, Z toggle pixel, X erase pixel)", 0, 120, 12, false, 1, true);
 
 
 }
@@ -295,7 +329,7 @@ function drawPreview() {
   let ligKeys = Object.keys(ligatures);
   if (ligKeys.length) {
     lineY += CELL + 4;
-    print("LIGS:", UI_PREVIEW_X, lineY - 8, 7);
+    print("LIGS:", UI_PREVIEW_X, lineY - 8, 7, false, 1, true);
 
     // muestra ligatura base + glyph representado
     let LigDrawX = UI_PREVIEW_X;
@@ -305,7 +339,7 @@ function drawPreview() {
       let glyph = ligatures[pair];
 
       // dibujar la secuencia y el nombre
-      print(pair, LigDrawX, LigDrawY, 12);
+      print(pair, LigDrawX, LigDrawY, 12, false, 1, true);
       drawChar(glyph, LigDrawX + 30, LigDrawY);
 
       LigDrawY += CELL + 2;
@@ -375,6 +409,14 @@ function getCurrentChar() {
   return font[getCurrentKey()];
 }
 
+function drawMouseButtonIcon(spriteIndexes, x, y) {
+  // coloca el icono de 2x2 sprites (8x8 cada uno)
+  spr(spriteIndexes[0], x, y);
+  spr(spriteIndexes[1], x + 8, y);
+  spr(spriteIndexes[2], x, y + 8);
+  spr(spriteIndexes[3], x + 8, y + 8);
+}
+
 // ======================
 // EXPORT
 // ======================
@@ -388,11 +430,26 @@ function exportFont() {
 }
 
 // <TILES>
-// 001:0000000000040000004400000444444004444440004400000004000000000000
-// 002:0000000000004000000044000444444004444440000044000000400000000000
-// 003:0000000000044000004444000444444000044000000440000004400000000000
-// 004:0000000000044000000440000004400004444440004444000004400000000000
+// 000:0000077700077007007000070700000707000007700000077000007070000700
+// 001:7770000070077000700007007000007070000070700000070700000700700007
+// 002:0000077700077667007666670766666707666667766666677666667076666700
+// 003:7770000076677000766667007666667076666670766666670766666700766667
+// 016:7000070070000700700007007000007070000070700000077000000707777777
+// 017:0070000700700007007000070700000707000007700000077000000777777770
+// 018:7666670076666700766667007666667076666670766666677666666707777777
+// 019:0076666700766667007666670766666707666667766666677666666777777770
 // </TILES>
+
+// <SPRITES>
+// 000:0000077700077007007000070700000707000007700000077000007070000700
+// 001:7770000070077000700007007000007070000070700000070700000700700007
+// 002:0000077700077667007666670766666707666667766666677666667076666700
+// 003:7770000076677000766667007666667076666670766666670766666700766667
+// 016:7000070070000700700007007000007070000070700000077000000707777777
+// 017:0070000700700007007000070700000707000007700000077000000777777770
+// 018:7666670076666700766667007666667076666670766666677666666707777777
+// 019:0076666700766667007666670766666707666667766666677666666777777770
+// </SPRITES>
 
 // <WAVES>
 // 000:00000000ffffffff00000000ffffffff
