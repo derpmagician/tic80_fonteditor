@@ -6,26 +6,26 @@
 // version: 0.1
 // script:  js
 
-// script: js
-
 const CELL = 10;
 const GRID = 8;
 
 // Teclas
 const KEY_A = 1;
+const KEY_P = 16;
 const KEY_S = 19;
 const KEY_UP = 58;
 const KEY_DOWN = 59;
 const KEY_LEFT = 60;
 const KEY_RIGHT = 61;
-const KEY_P = 80;
 
 // Estado
-let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ÑñÁáÉéÍíÓóÚúÜü";
+let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" +
+  "-=_[]\\;:'`,./";
 let index = 0;
 let cursorX = 0;
 let cursorY = 0;
 let mousePrevLeft = false;
+let lastInputWasMouse = false;
 
 // UI botones de cambio de carácter
 const UI_CHAR_Y = 10;
@@ -125,6 +125,7 @@ function getMouse() {
 function handleInput() {
   let m = getMouse();
   let hasMouse = m && m.x >= 0 && m.y >= 0;
+  let mouseOverGrid = hasMouse && m.x < GRID * CELL && m.y < GRID * CELL;
 
   let current = getCurrentChar();
   if (!current) {
@@ -134,20 +135,51 @@ function handleInput() {
     font[key] = current;
   }
 
-  if (hasMouse) {
+  let keyPrev = keyp(KEY_A);
+  let keyNext = keyp(KEY_S);
+  let gamepadCharPrev = btnp(7); // Y
+  let gamepadCharNext = btnp(6); // X
+
+  // UI + teclado + gamepad de cambio de carácter (siempre disponible)
+  let uiPrev = false;
+  let uiNext = false;
+  // UI button clicks deben funcionar aunque el mouse esté fuera del grid.
+  uiPrev = m.x >= UI_PREV_BUTTON.x && m.x < (UI_PREV_BUTTON.x + UI_PREV_BUTTON.w) && m.y >= UI_PREV_BUTTON.y && m.y < (UI_PREV_BUTTON.y + UI_PREV_BUTTON.h);
+  uiNext = m.x >= UI_NEXT_BUTTON.x && m.x < (UI_NEXT_BUTTON.x + UI_NEXT_BUTTON.w) && m.y >= UI_NEXT_BUTTON.y && m.y < (UI_NEXT_BUTTON.y + UI_NEXT_BUTTON.h);
+
+
+
+  let changed = false;
+  if (m.left && !mousePrevLeft && uiPrev) {
+    index = (index + chars.length - 1) % chars.length;
+    changed = true;
+    lastInputWasMouse = true;
+  } else if (m.left && !mousePrevLeft && uiNext) {
+    index = (index + 1) % chars.length;
+    changed = true;
+    lastInputWasMouse = true;
+  } else if (keyPrev) {
+    index = (index + chars.length - 1) % chars.length;
+    changed = true;
+    lastInputWasMouse = false;
+  } else if (keyNext) {
+    index = (index + 1) % chars.length;
+    changed = true;
+    lastInputWasMouse = false;
+  } else if (gamepadCharPrev) {
+    index = (index + chars.length - 1) % chars.length;
+    changed = true;
+    lastInputWasMouse = false;
+  } else if (gamepadCharNext) {
+    index = (index + 1) % chars.length;
+    changed = true;
+    lastInputWasMouse = false;
+  }
+
+  if (mouseOverGrid) {
     let gx = Math.floor(m.x / CELL);
     let gy = Math.floor(m.y / CELL);
 
-    let uiPrev = m.x >= UI_PREV_BUTTON.x && m.x < (UI_PREV_BUTTON.x + UI_PREV_BUTTON.w) && m.y >= UI_PREV_BUTTON.y && m.y < (UI_PREV_BUTTON.y + UI_PREV_BUTTON.h);
-    let uiNext = m.x >= UI_NEXT_BUTTON.x && m.x < (UI_NEXT_BUTTON.x + UI_NEXT_BUTTON.w) && m.y >= UI_NEXT_BUTTON.y && m.y < (UI_NEXT_BUTTON.y + UI_NEXT_BUTTON.h);
-
-    let keyPrev = keyp(KEY_A);
-    let keyNext = keyp(KEY_S);
-    let gamepadCharPrev = btnp(7); // Y
-    let gamepadCharNext = btnp(6); // X
-
-    if ((m.left && !mousePrevLeft && uiPrev) || keyPrev || gamepadCharPrev) index = (index + chars.length - 1) % chars.length;
-    if ((m.left && !mousePrevLeft && uiNext) || keyNext || gamepadCharNext) index = (index + 1) % chars.length;
 
     if (gx >= 0 && gx < GRID && gy >= 0 && gy < GRID) {
       if (m.left) {
@@ -155,11 +187,13 @@ function handleInput() {
       } else if (m.right) {
         current[gy][gx] = 0; // borrar while hold
       }
+      // Mantener cursor en el último píxel válido dentro del editor
       cursorX = gx;
       cursorY = gy;
     } else {
-      cursorX = Math.max(0, Math.min(GRID - 1, gx));
-      cursorY = Math.max(0, Math.min(GRID - 1, gy));
+      // Si el mouse sale del área, no alteramos cursorX/cursorY.
+      // Esto evita que el cursor se mueva a coordenadas "recortadas"
+      // cuando el usuario mueve el puntero fuera del grid.
     }
   }
 
@@ -173,10 +207,11 @@ function handleInput() {
   cursorY = Math.max(0, Math.min(GRID - 1, cursorY));
 
   // Edición con teclado siempre disponible
-  if (keyp(90)) { // Z = alterna pixel en cursor
+  // En TIC-80, las teclas son keycodes 1..94 (A=1, B=2, ..., X=24, Z=26)
+  if (keyp(26)) { // Z = alterna pixel en cursor
     current[cursorY][cursorX] = current[cursorY][cursorX] ? 0 : 1;
   }
-  if (keyp(88)) { // X = borra pixel en cursor
+  if (keyp(24)) { // X = borra pixel en cursor
     current[cursorY][cursorX] = 0;
   }
 
@@ -186,6 +221,7 @@ function handleInput() {
 
   // Export
   if (keyp(KEY_P) || keyp(112)) { // P
+    trace("DEBUG P key pressed: export triggered", 12);
     exportFont();
   }
 
@@ -199,8 +235,9 @@ function drawEditor() {
   let current = getCurrentChar();
   let m = getMouse();
   let hasMouse = m && m.x >= 0 && m.y >= 0;
-  let hoverX = hasMouse ? Math.floor(m.x / CELL) : -1;
-  let hoverY = hasMouse ? Math.floor(m.y / CELL) : -1;
+  let mouseOverGrid = hasMouse && m.x < GRID * CELL && m.y < GRID * CELL;
+  let hoverX = mouseOverGrid ? Math.floor(m.x / CELL) : -1;
+  let hoverY = mouseOverGrid ? Math.floor(m.y / CELL) : -1;
 
   for (let y = 0; y < GRID; y++) {
     for (let x = 0; x < GRID; x++) {
@@ -208,18 +245,18 @@ function drawEditor() {
       rect(x * CELL, y * CELL, CELL, CELL, color);
       rectb(x * CELL, y * CELL, CELL, CELL, 0);
 
-      if (hasMouse && x === hoverX && y === hoverY) {
+      if (mouseOverGrid && x === hoverX && y === hoverY) {
         rectb(x * CELL, y * CELL, CELL, CELL, 14);
-      }
-      if (!hasMouse && x === cursorX && y === cursorY) {
+      } else if (!mouseOverGrid && !lastInputWasMouse && x === cursorX && y === cursorY) {
         rectb(x * CELL, y * CELL, CELL, CELL, 14);
       }
     }
   }
 
 
-  print("LMB paint | RMB erase | P export", 0, 95, 12);
-  print("Mode: Mouse + Keyboard/Gamepad", 0, 105, 12);
+  print("LMB paint", 0, 95, 12);
+  print("RMB erase", 0, 105, 12);
+  print("P export", 0, 115, 12);
 
   // Botones de UI (click → cambio de character)
   rect(UI_PREV_BUTTON.x, UI_PREV_BUTTON.y, UI_PREV_BUTTON.w, UI_PREV_BUTTON.h, 2);
@@ -232,14 +269,9 @@ function drawEditor() {
   // Label del caracter central (ordenado con constantes)
   let label = getCurrentKey();
   print(label, UI_CHAR_LABEL.x, UI_CHAR_LABEL.y, 12);
+  print("Cursor: " + cursorX + "," + cursorY + " (A/S change char, Z toggle pixel, X erase pixel)", 0, 130, 12);
 
-  if (hasMouse) {
-    let clampX = Math.max(0, Math.min(GRID - 1, hoverX));
-    let clampY = Math.max(0, Math.min(GRID - 1, hoverY));
-    print("Mouse: " + clampX + "," + clampY, 0, 125, 12);
-    print("Cursor: " + cursorX + "," + cursorY + " (flechas mover, A/S o X/Y cambiar char)", 0, 130, 12);
 
-  }
 }
 
 // ======================
@@ -260,11 +292,28 @@ function drawPreview() {
   }
 
   // Mostrar ligaturas en una nueva línea tras las letras.
-  let ligText = Object.keys(ligatures).join(" ");
-  if (ligText) {
-    lineY += 4;
+  let ligKeys = Object.keys(ligatures);
+  if (ligKeys.length) {
+    lineY += CELL + 4;
     print("LIGS:", UI_PREVIEW_X, lineY - 8, 7);
-    drawText(ligText, UI_PREVIEW_X, lineY);
+
+    // muestra ligatura base + glyph representado
+    let LigDrawX = UI_PREVIEW_X;
+    let LigDrawY = lineY;
+    for (let i = 0; i < ligKeys.length; i++) {
+      let pair = ligKeys[i];
+      let glyph = ligatures[pair];
+
+      // dibujar la secuencia y el nombre
+      print(pair, LigDrawX, LigDrawY, 12);
+      drawChar(glyph, LigDrawX + 30, LigDrawY);
+
+      LigDrawY += CELL + 2;
+      if (LigDrawY > UI_PREVIEW_Y + 120) {
+        LigDrawY = lineY;
+        LigDrawX += 80;
+      }
+    }
   }
 }
 
