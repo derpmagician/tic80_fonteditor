@@ -6,14 +6,34 @@
 // version: 0.1
 // script:  js
 
+// layout
+const COL_1 = 10;
+const COL_2 = 83;
+
+const BG_COLOR = 1;
+const MAIN_COLOR = 14;
+const SECONDARY_COLOR = 10;
+
+// Grid
 const CELL = 10;
 const GRID = 8;
+const GRID_COLOR = MAIN_COLOR;
+const GRID_CURSOR_COLOR = SECONDARY_COLOR;
+
+const TITLE_TEXT_COLOR = SECONDARY_COLOR;
+const COMMON_TEXT_COLOR = MAIN_COLOR;
 
 // Teclas
 const KEY_A = 1;
 const KEY_H = 8;
 const KEY_P = 16;
 const KEY_S = 19;
+const KEY_T = 20;
+const KEY_BACKSPACE = 14;
+const KEY_DELETE = 127;
+const KEY_SPACE = 57;
+const KEY_MINUS = 37;
+const KEY_EQUALS = 38;
 const KEY_UP = 58;
 const KEY_DOWN = 59;
 const KEY_LEFT = 60;
@@ -30,18 +50,21 @@ let lastInputWasMouse = false;
 let mouseAnimationFrame = 0; // contador de frames para animar iconos
 let showHelp = false; // mostrar modal de ayuda
 
+let typedText = "";
+let textInputMode = false;
+
+// ui botones de preview
+const UI_PREVIEW_LABEL = { x: COL_2, y: 1, w: 50, h: 10 };
+
 // UI botones de cambio de carácter
-const UI_CHAR_Y = 10;
+const UI_CHAR_Y = GRID * CELL + 2; // debajo del grid (8*10=80 -> +2)
 const UI_CHAR_SPACING = 30;
-const UI_CONTROLS_X = GRID * CELL + 2;
-const UI_CHARGROUP_LABEL = { x: UI_CONTROLS_X, y: UI_CHAR_Y, w: 34, h: 12 };
+
+const UI_CONTROLS_X = 20;
+const UI_CHARGROUP_LABEL = { x: UI_CONTROLS_X - 20, y: UI_CHAR_Y + 10, w: 34, h: 12 };
 const UI_PREV_BUTTON = { x: UI_CONTROLS_X, y: UI_CHAR_Y, w: 10, h: 10 };
 const UI_CHAR_LABEL = { x: UI_CONTROLS_X + 14, y: UI_CHAR_Y + 2 };
 const UI_NEXT_BUTTON = { x: UI_CONTROLS_X + 24, y: UI_CHAR_Y, w: 10, h: 10 };
-
-// UI preview
-const UI_PREVIEW_X = 120;
-const UI_PREVIEW_Y = UI_CHAR_Y- 8;
 
 // Sprites de mouse (4 tiles 8x8 cada uno, valores directos del sprite tab)
 const MOUSE_LMB_SPRITES = [258, 257, 274, 273];
@@ -153,6 +176,25 @@ function getMouse() {
   return {x: -1, y: -1, left: false, right: false, middle: false};
 }
 
+function keyCodeToChar(keyCode) {
+  const map = {
+    // Alfabeto
+    1: 'A', 2: 'B', 3: 'C', 4: 'D', 5: 'E', 6: 'F', 7: 'G', 8: 'H', 9: 'I',
+    10: 'J', 11: 'K', 12: 'L', 13: 'M', 14: 'N', 15: 'O', 16: 'P', 17: 'Q', 18: 'R',
+    19: 'S', 20: 'T', 21: 'U', 22: 'V', 23: 'W', 24: 'X', 25: 'Y', 26: 'Z',
+    // Números
+    27: '0', 28: '1', 29: '2', 30: '3', 31: '4', 32: '5', 33: '6', 34: '7',
+    35: '8', 36: '9',
+    // Puntuación / símbolos imprimibles
+    37: '-', 38: '=', 39: '[', 40: ']', 41: '\\', 42: ';', 43: "'", 44: '`',
+    45: ',', 46: '.', 47: '/',
+    // Espacio
+    57: ' '
+  };
+
+  return map[keyCode] || "";
+}
+
 // ======================
 // INPUT
 // ======================
@@ -255,6 +297,38 @@ function handleInput() {
   if (index < 0) index = totalOptions - 1;
   if (index >= totalOptions) index = 0;
 
+  // Toggle de modo texto (mientras se edita texto no se cambia carácter con A/S).
+  if (keyp(KEY_T)) {
+    textInputMode = !textInputMode;
+  }
+
+  if (textInputMode) {
+    // BACKSPACE / DELETE
+    if (keyp(KEY_BACKSPACE) || keyp(KEY_DELETE)) {
+      typedText = typedText.slice(0, -1);
+    }
+
+    // Capturar cualquiera tecla imprimible en el modo texto
+    for (let code = 1; code <= 94; code++) {
+      if (keyp(code)) {
+        let ch = keyCodeToChar(code);
+        if (ch) {
+          typedText += ch;
+        }
+      }
+    }
+  }
+
+  // DELETE en modo normal deshace el carácter seleccionado (borrar celdas)
+  if (!textInputMode && keyp(KEY_DELETE)) {
+    let current = getCurrentChar();
+    for (let yy = 0; yy < GRID; yy++) {
+      for (let xx = 0; xx < GRID; xx++) {
+        current[yy][xx] = 0;
+      }
+    }
+  }
+
   // Ayuda modal
   if (keyp(KEY_H)) {
     showHelp = !showHelp;
@@ -290,30 +364,43 @@ function drawEditor() {
 
   for (let y = 0; y < GRID; y++) {
     for (let x = 0; x < GRID; x++) {
-      let color = current[y][x] ? 12 : 1;
+      let color = current[y][x] ? 12 : GRID_COLOR;
       rect(x * CELL, y * CELL, CELL, CELL, color);
       rectb(x * CELL, y * CELL, CELL, CELL, 0);
 
       if (mouseOverGrid && x === hoverX && y === hoverY) {
-        rectb(x * CELL, y * CELL, CELL, CELL, 14);
+        rectb(x * CELL, y * CELL, CELL, CELL, GRID_CURSOR_COLOR);
       } else if (!mouseOverGrid && !lastInputWasMouse && x === cursorX && y === cursorY) {
-        rectb(x * CELL, y * CELL, CELL, CELL, 14);
+        rectb(x * CELL, y * CELL, CELL, CELL, GRID_CURSOR_COLOR);
       }
     }
   }
 
-    print("press H for help", 0, 90, 12, false, 1, true);
+  const UI_INFO_Y = UI_CHAR_Y + 16;
+  print("press H for help", 0, UI_INFO_Y, COMMON_TEXT_COLOR, false, 1, true);
+  print("Ctrl + T: toggle text input", 0, UI_INFO_Y + 10, COMMON_TEXT_COLOR, false, 1, true);
+  print("Mode: " + (textInputMode ? "TEXT" : "EDIT"), 0, UI_INFO_Y + 18, COMMON_TEXT_COLOR, false, 1, true);
+
+  // Texto con fuente custom creada
+  const typedTextY = UI_INFO_Y + 30;
+  if (typedText.length > 0) {
+    drawText(typedText, 0, typedTextY);
+  } else {
+    print("(enter text in TEXT mode)", 0, typedTextY, COMMON_TEXT_COLOR, false, 1, true);
+  }
 
   // Botones de UI (click → cambio de character)
-  rect(UI_PREV_BUTTON.x, UI_PREV_BUTTON.y, UI_PREV_BUTTON.w, UI_PREV_BUTTON.h, 2);
-  print("<", UI_PREV_BUTTON.x + 4, UI_PREV_BUTTON.y + 4, 12, false, 1, true);
+  rectb(UI_PREV_BUTTON.x, UI_PREV_BUTTON.y, UI_PREV_BUTTON.w, UI_PREV_BUTTON.h, SECONDARY_COLOR);
+  print("<", UI_PREV_BUTTON.x + 4, UI_PREV_BUTTON.y + 2, 12, false, 1, true);
 
-  rect(UI_NEXT_BUTTON.x, UI_NEXT_BUTTON.y, UI_NEXT_BUTTON.w, UI_NEXT_BUTTON.h, 2);
-  print(">", UI_NEXT_BUTTON.x + 4, UI_NEXT_BUTTON.y + 4, 12, false, 1, true);
+  rectb(UI_NEXT_BUTTON.x, UI_NEXT_BUTTON.y, UI_NEXT_BUTTON.w, UI_NEXT_BUTTON.h, SECONDARY_COLOR);
+  print(">", UI_NEXT_BUTTON.x + 4, UI_NEXT_BUTTON.y + 2, 12, false, 1, true);
 
-  print("CHAR:          PREVIEW:", UI_CHARGROUP_LABEL.x, UI_CHARGROUP_LABEL.y - 8, 12, false, 1, true);
+  print("CHAR:", UI_CHARGROUP_LABEL.x, UI_CHARGROUP_LABEL.y - 8, TITLE_TEXT_COLOR, false, 1, true);
   // Label del caracter central (ordenado con constantes)
   let label = getCurrentKey();
+  print("PREVIEW:", UI_PREVIEW_LABEL.x, UI_PREVIEW_LABEL.y, TITLE_TEXT_COLOR, false, 1, true);
+
   print(label, UI_CHAR_LABEL.x, UI_CHAR_LABEL.y, 12, false, 1, true);
 
 }
@@ -321,20 +408,23 @@ function drawEditor() {
 function drawHelpModal() {
   // Fondo semitransparente y panel central
   rect(0, 0, 240, 136, 0);
-  rect(8, 8, 224, 120, 1);
-  rectb(8, 8, 224, 120, 12);
+  rect(8, 8, 224, 120, 0);
+  rectb(8, 8, 224, 120, 1);
 
   print("HELP (H para cerrar)", 16, 14, 12, false, 1, true);
-  print("A/S: cambiar caracter", 16, 28, 12, false, 1, true);
-  print("Z: alternar pixel", 16, 38, 12, false, 1, true);
-  print("X: borrar pixel", 16, 48, 12, false, 1, true);
-  print("P: exportar fuente", 16, 58, 12, false, 1, true);
-  print("H: mostrar/ocultar ayuda", 16, 68, 12, false, 1, true);
+  print("A/S: cambiar caracter", 16, 24, 12, false, 1, true);
+  print("Z: alternar pixel", 16, 32, 12, false, 1, true);
+  print("X: borrar pixel", 16, 40, 12, false, 1, true);
+  print("Ctrl + T: toggle text input", 16, 48, 12, false, 1, true);
+  print("BACKSPACE/DELETE: borrar texto", 16, 56, 12, false, 1, true);
+  print("DELETE (modo edit): limpiar char", 16, 64, 12, false, 1, true);
+  print("P: exportar fuente", 16, 72, 12, false, 1, true);
+  print("H: mostrar/ocultar ayuda", 16, 80, 12, false, 1, true);
 
   // Iconos LMB/RMB y explicación
-  print("LMB: pinta", 16, 84, 12, false, 1, true);
+  print("LMB: pinta", 16, 88, 12, false, 1, true);
   drawMouseButtonIcon(getLmbSprites(), 90, 80);
-  print("RMB: borra", 16, 100, 12, false, 1, true);
+  print("RMB: borra", 16, 96, 12, false, 1, true);
   drawMouseButtonIcon(getRmbSprites(), 90, 96);
 
   print("Ppal: cambia ligaturas con A/S.", 16, 116, 12, false, 1, true);
@@ -346,14 +436,14 @@ function drawHelpModal() {
 function drawPreview() {
   // Mostrar todos los caracteres básicos en varias filas para no salirse del borde.
   let previewChars = chars;
-  let charsPerLine = 12;
-  let lineY = UI_PREVIEW_Y; // alineado con UI_CHAR_Y
+  let charsPerLine = 16;
+  let lineY = 0; // alineado con UI_CHAR_Y
 
   lineY += CELL; // reducir espaciado
 
   for (let start = 0; start < previewChars.length; start += charsPerLine) {
     let slice = previewChars.slice(start, start + charsPerLine);
-    drawText(slice, UI_PREVIEW_X, lineY);
+    drawText(slice, COL_2, lineY);
     lineY += CELL + 2; // menos separación entre líneas
   }
 
@@ -361,10 +451,10 @@ function drawPreview() {
   let ligKeys = Object.keys(ligatures);
   if (ligKeys.length) {
     lineY += CELL + 4;
-    print("LIGS:", UI_PREVIEW_X, lineY - 8, 7, false, 1, true);
+    print("LIGS:", COL_2, 60, TITLE_TEXT_COLOR, false, 1, true);
 
     let ligText = ligKeys.join("");
-    drawText(ligText, UI_PREVIEW_X, lineY);
+    drawText(ligText, COL_2, 66);
   }
 
 }
