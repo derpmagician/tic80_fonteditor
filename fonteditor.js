@@ -27,6 +27,7 @@ const COMMON_TEXT_COLOR = MAIN_COLOR;
 const KEY_A = 1;
 const KEY_H = 8;
 const KEY_P = 16;
+const KEY_CTRL = 63;
 const KEY_S = 19;
 const KEY_T = 20;
 const KEY_BACKSPACE = 14;
@@ -211,19 +212,19 @@ function handleInput() {
     font[key] = current;
   }
 
-  let keyPrev = keyp(KEY_A);
-  let keyNext = keyp(KEY_S);
-  let gamepadCharPrev = btnp(7); // Y
-  let gamepadCharNext = btnp(6); // X
+  let keyPrev = !textInputMode && keyp(KEY_A);
+  let keyNext = !textInputMode && keyp(KEY_S);
+  let gamepadCharPrev = !textInputMode && btnp(7); // Y
+  let gamepadCharNext = !textInputMode && btnp(6); // X
 
   let totalOptions = getAllEditableKeys().length;
 
-  // UI + teclado + gamepad de cambio de carácter (siempre disponible)
+  // UI + teclado + gamepad de cambio de carácter (para modo EDIT)
   let uiPrev = false;
   let uiNext = false;
   // UI button clicks deben funcionar aunque el mouse esté fuera del grid.
-  uiPrev = m.x >= UI_PREV_BUTTON.x && m.x < (UI_PREV_BUTTON.x + UI_PREV_BUTTON.w) && m.y >= UI_PREV_BUTTON.y && m.y < (UI_PREV_BUTTON.y + UI_PREV_BUTTON.h);
-  uiNext = m.x >= UI_NEXT_BUTTON.x && m.x < (UI_NEXT_BUTTON.x + UI_NEXT_BUTTON.w) && m.y >= UI_NEXT_BUTTON.y && m.y < (UI_NEXT_BUTTON.y + UI_NEXT_BUTTON.h);
+  uiPrev = !textInputMode && m.x >= UI_PREV_BUTTON.x && m.x < (UI_PREV_BUTTON.x + UI_PREV_BUTTON.w) && m.y >= UI_PREV_BUTTON.y && m.y < (UI_PREV_BUTTON.y + UI_PREV_BUTTON.h);
+  uiNext = !textInputMode && m.x >= UI_NEXT_BUTTON.x && m.x < (UI_NEXT_BUTTON.x + UI_NEXT_BUTTON.w) && m.y >= UI_NEXT_BUTTON.y && m.y < (UI_NEXT_BUTTON.y + UI_NEXT_BUTTON.h);
 
 
 
@@ -329,8 +330,8 @@ function handleInput() {
     }
   }
 
-  // Ayuda modal
-  if (keyp(KEY_H)) {
+  // Ayuda modal (Ctrl + H)
+  if (keyp(KEY_H) && key(KEY_CTRL)) {
     showHelp = !showHelp;
   }
 
@@ -377,7 +378,7 @@ function drawEditor() {
   }
 
   const UI_INFO_Y = UI_CHAR_Y + 16;
-  print("press H for help", 0, UI_INFO_Y, COMMON_TEXT_COLOR, false, 1, true);
+  print("Ctrl + H for help", 0, UI_INFO_Y, COMMON_TEXT_COLOR, false, 1, true);
   print("Ctrl + T: toggle text input", 0, UI_INFO_Y + 10, COMMON_TEXT_COLOR, false, 1, true);
   print("Mode: " + (textInputMode ? "TEXT" : "EDIT"), 0, UI_INFO_Y + 18, COMMON_TEXT_COLOR, false, 1, true);
 
@@ -411,7 +412,7 @@ function drawHelpModal() {
   rect(8, 8, 224, 120, 0);
   rectb(8, 8, 224, 120, 1);
 
-  print("HELP (H para cerrar)", 16, 14, 12, false, 1, true);
+  print("HELP (Ctrl+H para cerrar)", 16, 14, 12, false, 1, true);
   print("A/S: cambiar caracter", 16, 24, 12, false, 1, true);
   print("Z: alternar pixel", 16, 32, 12, false, 1, true);
   print("X: borrar pixel", 16, 40, 12, false, 1, true);
@@ -419,7 +420,7 @@ function drawHelpModal() {
   print("BACKSPACE/DELETE: borrar texto", 16, 56, 12, false, 1, true);
   print("DELETE (modo edit): limpiar char", 16, 64, 12, false, 1, true);
   print("P: exportar fuente", 16, 72, 12, false, 1, true);
-  print("H: mostrar/ocultar ayuda", 16, 80, 12, false, 1, true);
+  print("Ctrl+H: mostrar/ocultar ayuda", 16, 80, 12, false, 1, true);
 
   // Iconos LMB/RMB y explicación
   print("LMB: pinta", 16, 88, 12, false, 1, true);
