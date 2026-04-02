@@ -1,57 +1,71 @@
----
-name: copilot-instructions
-# Optional: set applyTo narrower if you add many repos in one org
-applyTo: "**/*.js"
-description: "Project-specific Copilot Desktop instructions for Tic-80 font editor maintenance and enhancements."
----
+# Project Guidelines
 
-# Tic-80 Font Editor (fonteditor)
+## Overview
 
-This repository contains a Tic-80 font editing demo script in `fonteditor.js` (8x8 pixel glyph design, ligature support and preview rendering). Use this workspace instruction to guide Copilot for feature requests, bug fixes, and cleanups.
+TIC-80 pixel font editor — a single-file cartridge (`fonteditor.js`) that runs inside the TIC-80 fantasy console. Lets you draw 8×8 pixel characters, define ligatures, preview text, and export font data as JSON.
 
-## Key files
+## TIC-80 Runtime
 
-- `fonteditor.js`: single source file. Main loop `TIC()` handles input, brush editing, visualization, ligature parsing, and JSON export.
-- `modern-font-requirements.md`: likely design / feature requirements for font rendering or constraints.
-- `tic80_man.md`: may include user notes or TIC-80 platform references.
+- **Display**: 240×136 pixels, 16-color palette
+- **Language**: JavaScript (TIC-80 JS runtime, not browser JS)
+- **No build step**: `fonteditor.js` IS the cartridge — load and run directly in TIC-80
+- **Run**: Open TIC-80 → `load fonteditor` → `run` (or Ctrl+R)
+- **API reference**: See [tic80_man.md](../tic80_man.md) for all available functions
 
-## What we expect from Copilot
+## Key Conventions
 
-1. **Code improvements**
-   - Make editor behavior robust (clear/undo, selection, preserved state across characters)
-   - Enhance export format for read/write compatibility with Tic-80 font data (e.g. binary tile encoding, JSON + named glyph array)
-   - Add UI affordances inside `TIC()` (current char index, grid overlays, clear all, invert, save/load)
+### Code Structure
 
-2. **Bug fixes**
-   - Keep `index` in range when char set changes
-   - Avoid silently skipping missing glyphs in `drawText()`/`drawChar()`; fallback to placeholder (e.g. `?`)
-   - Validate `ligatures` keys to not conflict with single char indices
+The file follows a strict section order marked with `// ========` banners:
+1. Constants (layout, colors, keys)
+2. State variables
+3. UI constants
+4. Sprite/animation helpers
+5. Font data + ligatures
+6. `TIC()` — main loop (called at 60fps)
+7. Input handling (`handleInput`)
+8. Editor drawing (`drawEditor`, `drawHelpModal`)
+9. Preview drawing (`drawPreview`)
+10. Text rendering (`drawText`, `drawChar`)
+11. Helpers (`getAllEditableKeys`, `getCurrentKey`, `getCurrentChar`)
+12. Export (`exportFont`)
+13. TIC-80 asset blocks (`<TILES>`, `<SPRITES>`, `<WAVES>`, etc.) — **never remove or reorder**
 
-3. **Documentation**
-   - Add README usage instructions: load in Tic-80, edit glyphs, arrow keys, export via `E` key, import support when added.
-   - Document keyboard/mouse controls and data format.
+### Input System
 
-## Copilot prompt patterns (examples)
+- TIC-80 key codes differ from browser codes — see `tic80_man.md` Key IDs table
+- `keyp(code)` = key just pressed this frame; `key(code)` = key held down
+- `btn/btnp` = gamepad buttons (0–7 for P1)
+- Modifier combos use `keyp(KEY) && key(KEY_CTRL)` pattern
+- Current shortcuts: `Ctrl+H` help, `Ctrl+T` text mode, `Ctrl+P` export
+- **Two modes**: EDIT (draw pixels, A/S change char) and TEXT (type preview text). Character switching is disabled in TEXT mode.
 
-- "Add undo/redo to Tic-80 font editor grid editing in `fonteditor.js`."
-- "Convert current per-pixel array glyph store to typed `Uint8Array` bitmask in `fonteditor.js`."
-- "Implement save/load font JSON to Tic-80 cart memory for `fonteditor.js`."
+### Mouse Handling
 
-## Quick run/test guidance
+- `mouse()` returns vary by TIC-80 version — always use the `getMouse()` wrapper
+- Track `mousePrevLeft` for click-edge detection (not hold)
 
-Tic-80 scripts are tested by loading in the Tic-80 app:
-- Start Tic-80
-- `LOAD fonteditor.js`
-- Press `RUN` (or `CTRL+R`)
-- Use mouse to draw in 8x8 cell grid
-- Press left/right keys to switch glyph
-- Press `E` to export font JSON via `trace()` output
+### Font Data
 
-## Auto-generated best practices
+- Each character is an 8×8 array of 0/1 (off/on pixels)
+- Ligatures map multi-char sequences to single glyph keys (e.g., `"ch"` → `"CH"`)
+- `chars` string defines the editable character set; ligature keys are appended to the editable list
 
-- Avoid globals where a function-local or object can encapsulate state.
-- Prefer naming clarity (`CURRENT_CHAR_KEY`, `glpyhIndex`) and avoid comments-only logic.
+### Drawing
 
----
+- Use `rect` for filled areas, `rectb` for borders
+- Use `print(text, x, y, color, fixed, scale, smallfont)` — TIC-80's built-in font
+- Custom font rendering goes through `drawText` → `drawChar` (reads `font[]` data)
+- Color 12 = active/filled pixels, color 0 = background
 
-> For missing automation docs, ask the user if they want tests under `tictest/` or a CLI converter script.
+## Pitfalls
+
+- **Asset blocks at EOF**: The `// <TILES>` ... `// </TILES>` blocks are parsed by TIC-80. Never alter their format or move them away from the end of the file.
+- **`KEY_DELETE` code is 127** in this project (non-standard TIC-80 mapping) — verify against `tic80_man.md` if adding new key bindings.
+- **No `console.log`**: Use `trace(msg, color)` for debug output in TIC-80.
+- **No ES modules / imports**: Everything lives in one global scope inside the cartridge.
+
+## Related Docs
+
+- [tic80_man.md](../tic80_man.md) — TIC-80 API, RAM layout, key/button IDs
+- [modern-font-requirements.md](../modern-font-requirements.md) — Long-term design goals for the font

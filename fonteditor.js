@@ -8,14 +8,15 @@
 
 // layout
 const COL_1 = 10;
-const COL_2 = 83;
+const COL_2 = 55;
+const COL_3 = 87;
 
 const BG_COLOR = 1;
 const MAIN_COLOR = 14;
 const SECONDARY_COLOR = 10;
 
 // Grid
-const CELL = 10;
+const CELL = 6;
 const GRID = 8;
 const GRID_COLOR = MAIN_COLOR;
 const GRID_CURSOR_COLOR = SECONDARY_COLOR;
@@ -28,11 +29,13 @@ const KEY_A = 1;
 const KEY_H = 8;
 const KEY_P = 16;
 const KEY_CTRL = 63;
+const KEY_SHIFT = 64;
 const KEY_S = 19;
 const KEY_T = 20;
-const KEY_BACKSPACE = 14;
+const KEY_BACKSPACE = 51;
 const KEY_DELETE = 127;
-const KEY_SPACE = 57;
+const KEY_DELETE_STD = 52;
+const KEY_SPACE = 48;
 const KEY_MINUS = 37;
 const KEY_EQUALS = 38;
 const KEY_UP = 58;
@@ -42,7 +45,7 @@ const KEY_RIGHT = 61;
 
 // Estado
 let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" +
-  "-=_[]\\;:'`,./";
+  "-=_[]\\;'`,./ " ; // Espacio añadido al final para poder editar el glifo ' ' (space)
 let index = 0;
 let cursorX = 0;
 let cursorY = 0;
@@ -53,9 +56,16 @@ let showHelp = false; // mostrar modal de ayuda
 
 let typedText = "";
 let textInputMode = false;
+let textCursorPos = 0;
+let showExportModal = false;
+let exportJsonText = "";
+let exportCopyFeedback = "";
+let exportStatusMessage = "";
+let exportStatusTimer = 0;
 
 // ui botones de preview
-const UI_PREVIEW_LABEL = { x: COL_2, y: 1, w: 50, h: 10 };
+const UI_PREVIEW_LABEL = { x: COL_3, y: 1, w: 50, h: 10 };
+const UI_EXPORT_BUTTON = { x: COL_2, y: 1, w: 28, h: 10 };
 
 // UI botones de cambio de carácter
 const UI_CHAR_Y = GRID * CELL + 2; // debajo del grid (8*10=80 -> +2)
@@ -98,13 +108,7 @@ function getRmbSprites() {
 // Fuente
 let font = {};
 let ligatures = {
-  "=>": "ARROW",
-  "<=": "LE",
-  ">=": "GE",
   "==": "EQ",
-  "!=": "NE",
-  "&&": "AND",
-  "||": "OR",
   "ch": "CH",
   "ll": "LL",
   "rr": "RR",
@@ -146,6 +150,10 @@ function TIC() {
   cls(0);
 
   mouseAnimationFrame += 1;
+  if (exportStatusTimer > 0) {
+    exportStatusTimer -= 1;
+    if (exportStatusTimer === 0) exportStatusMessage = "";
+  }
 
   handleInput();
   drawEditor();
@@ -190,10 +198,35 @@ function keyCodeToChar(keyCode) {
     37: '-', 38: '=', 39: '[', 40: ']', 41: '\\', 42: ';', 43: "'", 44: '`',
     45: ',', 46: '.', 47: '/',
     // Espacio
-    57: ' '
+    48: ' '
   };
 
   return map[keyCode] || "";
+}
+
+function getTextCursorRenderX(text, cursorPos, startX) {
+  let x = startX;
+  let i = 0;
+  let stop = Math.max(0, Math.min(cursorPos, text.length));
+
+  while (i < text.length && i < stop) {
+    let rawPair = text[i] + (text[i + 1] || "");
+    let ligKey = rawPair;
+
+    if (!ligatures[ligKey]) {
+      ligKey = rawPair.toLowerCase();
+    }
+
+    if (ligatures[ligKey] && i + 2 <= stop) {
+      i += 2;
+    } else {
+      i += 1;
+    }
+
+    x += CELL;
+  }
+
+  return x;
 }
 
 // ======================
@@ -222,9 +255,11 @@ function handleInput() {
   // UI + teclado + gamepad de cambio de carácter (para modo EDIT)
   let uiPrev = false;
   let uiNext = false;
+  let uiExport = false;
   // UI button clicks deben funcionar aunque el mouse esté fuera del grid.
   uiPrev = !textInputMode && m.x >= UI_PREV_BUTTON.x && m.x < (UI_PREV_BUTTON.x + UI_PREV_BUTTON.w) && m.y >= UI_PREV_BUTTON.y && m.y < (UI_PREV_BUTTON.y + UI_PREV_BUTTON.h);
   uiNext = !textInputMode && m.x >= UI_NEXT_BUTTON.x && m.x < (UI_NEXT_BUTTON.x + UI_NEXT_BUTTON.w) && m.y >= UI_NEXT_BUTTON.y && m.y < (UI_NEXT_BUTTON.y + UI_NEXT_BUTTON.h);
+  uiExport = m.x >= UI_EXPORT_BUTTON.x && m.x < (UI_EXPORT_BUTTON.x + UI_EXPORT_BUTTON.w) && m.y >= UI_EXPORT_BUTTON.y && m.y < (UI_EXPORT_BUTTON.y + UI_EXPORT_BUTTON.h);
 
 
 
@@ -301,27 +336,51 @@ function handleInput() {
   // Toggle de modo texto (mientras se edita texto no se cambia carácter con A/S).
   if (keyp(KEY_T)) {
     textInputMode = !textInputMode;
+    if (textInputMode) {
+      textCursorPos = typedText.length;
+    }
   }
 
   if (textInputMode) {
-    // BACKSPACE / DELETE
-    if (keyp(KEY_BACKSPACE) || keyp(KEY_DELETE)) {
-      typedText = typedText.slice(0, -1);
+    textCursorPos = Math.max(0, Math.min(textCursorPos, typedText.length));
+
+    // Cursor de texto
+    if (keyp(KEY_LEFT)) {
+      textCursorPos = Math.max(0, textCursorPos - 1);
+    }
+    if (keyp(KEY_RIGHT)) {
+      textCursorPos = Math.min(typedText.length, textCursorPos + 1);
+    }
+
+    // BACKSPACE / DELETE sobre la posición del cursor
+    if (keyp(KEY_BACKSPACE) && textCursorPos > 0) {
+      typedText = typedText.slice(0, textCursorPos - 1) + typedText.slice(textCursorPos);
+      textCursorPos -= 1;
+    }
+    if ((keyp(KEY_DELETE) || keyp(KEY_DELETE_STD)) && textCursorPos < typedText.length) {
+      typedText = typedText.slice(0, textCursorPos) + typedText.slice(textCursorPos + 1);
     }
 
     // Capturar cualquiera tecla imprimible en el modo texto
-    for (let code = 1; code <= 94; code++) {
-      if (keyp(code)) {
-        let ch = keyCodeToChar(code);
-        if (ch) {
-          typedText += ch;
+    if (!key(KEY_CTRL)) {
+      for (let code = 1; code <= 94; code++) {
+        if (keyp(code)) {
+          let ch = keyCodeToChar(code);
+          if (ch) {
+            // Diferenciar mayúsculas/minúsculas para letras (Shift)
+            if (code >= 1 && code <= 26) {
+              ch = key(KEY_SHIFT) ? ch.toUpperCase() : ch.toLowerCase();
+            }
+            typedText = typedText.slice(0, textCursorPos) + ch + typedText.slice(textCursorPos);
+            textCursorPos += 1;
+          }
         }
       }
     }
   }
 
   // DELETE en modo normal deshace el carácter seleccionado (borrar celdas)
-  if (!textInputMode && keyp(KEY_DELETE)) {
+  if (!textInputMode && (keyp(KEY_DELETE) || keyp(KEY_DELETE_STD))) {
     let current = getCurrentChar();
     for (let yy = 0; yy < GRID; yy++) {
       for (let xx = 0; xx < GRID; xx++) {
@@ -335,10 +394,14 @@ function handleInput() {
     showHelp = !showHelp;
   }
 
-  // Export
-  if (keyp(KEY_P) || keyp(112)) { // P
-    trace("DEBUG P key pressed: export triggered", 12);
-    exportFont();
+  // Export button click
+  if (m.left && !mousePrevLeft && uiExport) {
+    saveExportData();
+  }
+
+  // Export shortcut still available
+  if (keyp(KEY_P) && key(KEY_CTRL)) {
+    saveExportData();
   }
 
   mousePrevLeft = m.left;
@@ -378,16 +441,31 @@ function drawEditor() {
   }
 
   const UI_INFO_Y = UI_CHAR_Y + 16;
-  print("Ctrl + H for help", 0, UI_INFO_Y, COMMON_TEXT_COLOR, false, 1, true);
-  print("Ctrl + T: toggle text input", 0, UI_INFO_Y + 10, COMMON_TEXT_COLOR, false, 1, true);
-  print("Mode: " + (textInputMode ? "TEXT" : "EDIT"), 0, UI_INFO_Y + 18, COMMON_TEXT_COLOR, false, 1, true);
+  print("Ctrl+H: help menu", 0, UI_INFO_Y, COMMON_TEXT_COLOR, false, 1, true);
+  print("Ctrl+T: toggle text mode", 0, UI_INFO_Y + 10, COMMON_TEXT_COLOR, false, 1, true);
+  print("Mode: " + (textInputMode ? "TEXT" : "EDIT"), 0, UI_INFO_Y + 20, COMMON_TEXT_COLOR, false, 1, true);
+  rectb(UI_EXPORT_BUTTON.x, UI_EXPORT_BUTTON.y, UI_EXPORT_BUTTON.w, UI_EXPORT_BUTTON.h, SECONDARY_COLOR);
+  print("EXPORT", UI_EXPORT_BUTTON.x + 2, UI_EXPORT_BUTTON.y + 2, 12, false, 1, true);
+
+  if (exportStatusMessage) {
+    print(exportStatusMessage, UI_EXPORT_BUTTON.x - 2, UI_EXPORT_BUTTON.y + 12, 12, false, 1, true);
+  }
 
   // Texto con fuente custom creada
-  const typedTextY = UI_INFO_Y + 30;
+  const typedTextY = UI_INFO_Y + 40;
   if (typedText.length > 0) {
     drawText(typedText, 0, typedTextY);
-  } else {
-    print("(enter text in TEXT mode)", 0, typedTextY, COMMON_TEXT_COLOR, false, 1, true);
+  } else if (!textInputMode) {
+    print("write in TEXT mode", 0, typedTextY, COMMON_TEXT_COLOR, false, 1, true);
+  }
+
+  if (textInputMode) {
+    let cursorXText = getTextCursorRenderX(typedText, textCursorPos, 0);
+    let cursorBlinkOn = Math.floor(mouseAnimationFrame / 20) % 2 === 0;
+    if (cursorBlinkOn) {
+      rect(cursorXText, typedTextY, 1, GRID, SECONDARY_COLOR);
+    }
+    print("Cursor: " + textCursorPos + "/" + typedText.length, 0, typedTextY + GRID + 2, COMMON_TEXT_COLOR, false, 1, true);
   }
 
   // Botones de UI (click → cambio de character)
@@ -406,29 +484,48 @@ function drawEditor() {
 
 }
 
+function drawExportModal() {
+  rect(0, 0, 240, 136, 0);
+  rect(8, 8, 224, 120, 1);
+  rectb(8, 8, 224, 120, 12);
+
+  print("EXPORT JSON", 16, 14, 12, false, 1, true);
+  print("Close", 170, 40, 12, false, 1, true);
+  rectb(170, 40, 40, 10, 12);
+  print("Copy", 110, 40, 12, false, 1, true);
+  rectb(110, 40, 40, 10, 12);
+
+  let y = 60;
+  let visibleText = exportJsonText;
+  // Ajustar para no salirse de la pantalla
+  let lines = visibleText.split("\n").slice(0, 8);
+  for (let line of lines) {
+    print(line, 12, y, COMMON_TEXT_COLOR, false, 1, true);
+    y += 10;
+  }
+
+  if (exportCopyFeedback) {
+    print(exportCopyFeedback, 12, y + 4, 12, false, 1, true);
+  }
+}
+
 function drawHelpModal() {
-  // Fondo semitransparente y panel central
   rect(0, 0, 240, 136, 0);
   rect(8, 8, 224, 120, 0);
   rectb(8, 8, 224, 120, 1);
 
-  print("HELP (Ctrl+H para cerrar)", 16, 14, 12, false, 1, true);
-  print("A/S: cambiar caracter", 16, 24, 12, false, 1, true);
-  print("Z: alternar pixel", 16, 32, 12, false, 1, true);
-  print("X: borrar pixel", 16, 40, 12, false, 1, true);
-  print("Ctrl + T: toggle text input", 16, 48, 12, false, 1, true);
-  print("BACKSPACE/DELETE: borrar texto", 16, 56, 12, false, 1, true);
-  print("DELETE (modo edit): limpiar char", 16, 64, 12, false, 1, true);
-  print("P: exportar fuente", 16, 72, 12, false, 1, true);
-  print("Ctrl+H: mostrar/ocultar ayuda", 16, 80, 12, false, 1, true);
+  print("HELP (Ctrl+H to close)", 16, 14, TITLE_TEXT_COLOR, false, 1, true);
+  print("A/S: change character", 16, 24, COMMON_TEXT_COLOR, false, 1, true);
+  print("Z: toggle pixel", 16, 32, COMMON_TEXT_COLOR, false, 1, true);
+  print("X: erase pixel", 16, 40, COMMON_TEXT_COLOR, false, 1, true);
+  print("Ctrl+T: toggle text input", 16, 48, COMMON_TEXT_COLOR, false, 1, true);
+  print("BACKSPACE/DELETE: delete text", 16, 56, COMMON_TEXT_COLOR, false, 1, true);
+  print("DELETE (edit mode): clear char", 16, 64, COMMON_TEXT_COLOR, false, 1, true);
+  print("Ctrl+P: export to json", 16, 72, COMMON_TEXT_COLOR, false, 1, true);
+  print("Ctrl+H: toggle help", 16, 80, COMMON_TEXT_COLOR, false, 1, true);
 
-  // Iconos LMB/RMB y explicación
-  print("LMB: pinta", 16, 88, 12, false, 1, true);
-  drawMouseButtonIcon(getLmbSprites(), 90, 80);
-  print("RMB: borra", 16, 96, 12, false, 1, true);
-  drawMouseButtonIcon(getRmbSprites(), 90, 96);
-
-  print("Ppal: cambia ligaturas con A/S.", 16, 116, 12, false, 1, true);
+  print("LMB: paint", 16, 88, COMMON_TEXT_COLOR, false, 1, true);
+  print("RMB: erase", 16, 96, COMMON_TEXT_COLOR, false, 1, true);
 }
 
 // ======================
@@ -437,25 +534,25 @@ function drawHelpModal() {
 function drawPreview() {
   // Mostrar todos los caracteres básicos en varias filas para no salirse del borde.
   let previewChars = chars;
-  let charsPerLine = 16;
+  let charsPerLine = 15;
   let lineY = 0; // alineado con UI_CHAR_Y
 
   lineY += CELL; // reducir espaciado
 
   for (let start = 0; start < previewChars.length; start += charsPerLine) {
     let slice = previewChars.slice(start, start + charsPerLine);
-    drawText(slice, COL_2, lineY);
-    lineY += CELL + 2; // menos separación entre líneas
+    drawText(slice, COL_3, lineY, 4);
+    lineY += CELL + 4; // menos separación entre líneas
   }
 
   // Mostrar ligaturas en una nueva línea tras las letras, uno al lado del otro.
   let ligKeys = Object.keys(ligatures);
   if (ligKeys.length) {
     lineY += CELL + 4;
-    print("LIGS:", COL_2, 60, TITLE_TEXT_COLOR, false, 1, true);
+    print("LIGS:", COL_3, 60, TITLE_TEXT_COLOR, false, 1, true);
 
     let ligText = ligKeys.join("");
-    drawText(ligText, COL_2, 66);
+    drawText(ligText, COL_3, 66);
   }
 
 }
@@ -463,7 +560,7 @@ function drawPreview() {
 // ======================
 // RENDER TEXTO
 // ======================
-function drawText(text, x, y) {
+function drawText(text, x, y, extra_space = 0) {
 
   let i = 0;
 
@@ -484,7 +581,7 @@ function drawText(text, x, y) {
       i++;
     }
 
-    x += CELL; // usa el tamaño de celda para espaciado consistente
+    x += CELL + extra_space; // usa el tamaño de celda para espaciado consistente
   }
 }
 
@@ -557,10 +654,41 @@ function exportFont() {
   let data = JSON.stringify({
     font: font,
     ligatures: ligatures
-  });
-
-  trace(data);
+  }, null, 2);
+  return data;
 }
+
+function copyToClipboard(value) {
+  // TODO: TIC-80 may not support clipboard APIs; fallback trace.
+  if (typeof clipboard === 'function') {
+    clipboard(value);
+    return true;
+  }
+  trace("Copy to clipboard not supported in this environment.", 12);
+  return false;
+}
+
+function openExportModal() {
+  exportJsonText = exportFont();
+  showExportModal = true;
+  exportCopyFeedback = "";
+}
+
+function saveExportData() {
+  exportJsonText = exportFont();
+  if (copyToClipboard(exportJsonText)) {
+    exportStatusMessage = "Export copied to clipboard";
+    exportStatusTimer = 180;
+    return;
+  }
+
+  trace("--- FONT JSON EXPORT START ---", 12);
+  trace(exportJsonText, 12);
+  trace("--- FONT JSON EXPORT END ---", 12);
+  exportStatusMessage = "Export sent to console";
+  exportStatusTimer = 180;
+}
+
 
 // <TILES>
 // 000:0000077700077007007000070700000707000007700000077000007070000700
